@@ -75,7 +75,29 @@ def add_task():
     conn.close()
 
     return jsonify({"message": "Oppdrag lagt til!"})
+# Oppdater status på et oppdrag
+@app.route("/update_status/<int:task_id>", methods=["POST"])
+def update_status(task_id):
+    new_status = request.json.get("status")
+    conn = sqlite3.connect(DB_NAME)
+    c = conn.cursor()
+    c.execute("UPDATE tasks SET status = ? WHERE id = ?", (new_status, task_id))
+    conn.commit()
+    conn.close()
+    return jsonify({"message": "Status oppdatert!"})
+
+
+# Slett et oppdrag
+@app.route("/delete_task/<int:task_id>", methods=["DELETE"])
+def delete_task(task_id):
+    conn = sqlite3.connect(DB_NAME)
+    c = conn.cursor()
+    c.execute("DELETE FROM tasks WHERE id = ?", (task_id,))
+    conn.commit()
+    conn.close()
+    return jsonify({"message": "Oppdrag slettet!"})
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
     app.run(host="0.0.0.0", port=port, debug=True)
+
