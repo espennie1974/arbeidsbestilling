@@ -1,1 +1,27 @@
+<!DOCTYPE html>
+<html lang="no">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Arbeidsbestilling</title>
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+    <h1>Arbeidsbestilling</h1>
+
+    <form id="taskForm">
+        <input type="text" id="title" placeholder="Tittel" required>
+        <input type="text" id="description" placeholder="Beskrivelse" required>
+        <input type="text" id="created_by" placeholder="Opprettet av">
+        <input type="text" id="assigned_to" placeholder="Tildelt til">
+        <button type="submit">Legg til oppdrag</button>
+    </form>
+
+    <h2>Oppdragsliste</h2>
+    <ul id="taskList"></ul>
+
+    <script src="/static/script.js"></script>
+</body>
+</html>
+
 
