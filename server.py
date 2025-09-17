@@ -1,38 +1,35 @@
-from flask import Flask, request, jsonify, send_from_directory
+from flask import Flask, request, jsonify, render_template
 import sqlite3
-from datetime import datetime
 import os
+from datetime import datetime
 
-app = Flask(__name__, static_folder="static")
+app = Flask(__name__)
 
 DB_NAME = "tasks.db"
 
-# Opprett database hvis den ikke finnes
+# --- Hjelpefunksjon for database ---
 def init_db():
     conn = sqlite3.connect(DB_NAME)
     c = conn.cursor()
     c.execute("""
         CREATE TABLE IF NOT EXISTS tasks (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
-            title TEXT,
+            title TEXT NOT NULL,
             description TEXT,
             created_by TEXT,
             assigned_to TEXT,
-            status TEXT,
+            status TEXT DEFAULT 'Aktiv',
             created_at TEXT
         )
     """)
     conn.commit()
     conn.close()
 
-init_db()
-
-# Rute for hovedsiden
+# --- Ruter ---
 @app.route("/")
-def home():
-    return send_from_directory(".", "index.html")
+def index():
+    return render_template("index.html")
 
-# Hent alle oppgaver
 @app.route("/tasks", methods=["GET"])
 def get_tasks():
     conn = sqlite3.connect(DB_NAME)
@@ -54,7 +51,6 @@ def get_tasks():
         })
     return jsonify(tasks)
 
-# Legg til en ny oppgave
 @app.route("/add_task", methods=["POST"])
 def add_task():
     data = request.get_json()
@@ -62,32 +58,32 @@ def add_task():
     description = data.get("description")
     created_by = data.get("created_by", "Ukjent")
     assigned_to = data.get("assigned_to", "Ikke tildelt")
-    status = data.get("status", "Aktiv")
     created_at = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
     conn = sqlite3.connect(DB_NAME)
     c = conn.cursor()
     c.execute("""
         INSERT INTO tasks (title, description, created_by, assigned_to, status, created_at)
-        VALUES (?, ?, ?, ?, ?, ?)
-    """, (title, description, created_by, assigned_to, status, created_at))
+        VALUES (?, ?, ?, ?, 'Aktiv', ?)
+    """, (title, description, created_by, assigned_to, created_at))
     conn.commit()
     conn.close()
 
     return jsonify({"message": "Oppdrag lagt til!"})
-# Oppdater status på et oppdrag
+
 @app.route("/update_status/<int:task_id>", methods=["POST"])
 def update_status(task_id):
-    new_status = request.json.get("status")
+    data = request.get_json()
+    new_status = data.get("status", "Aktiv")
+
     conn = sqlite3.connect(DB_NAME)
     c = conn.cursor()
     c.execute("UPDATE tasks SET status = ? WHERE id = ?", (new_status, task_id))
     conn.commit()
     conn.close()
+
     return jsonify({"message": "Status oppdatert!"})
 
-
-# Slett et oppdrag
 @app.route("/delete_task/<int:task_id>", methods=["DELETE"])
 def delete_task(task_id):
     conn = sqlite3.connect(DB_NAME)
@@ -95,9 +91,11 @@ def delete_task(task_id):
     c.execute("DELETE FROM tasks WHERE id = ?", (task_id,))
     conn.commit()
     conn.close()
+
     return jsonify({"message": "Oppdrag slettet!"})
 
+# --- Start app ---
 if __name__ == "__main__":
+    init_db()
     port = int(os.environ.get("PORT", 5000))
     app.run(host="0.0.0.0", port=port, debug=True)
-
