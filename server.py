@@ -52,6 +52,12 @@ def index():
     return render_template('index.html')
 
 
+@app.route('/test')
+def test():
+    """Test-endepunkt for å sjekke om appen kjører"""
+    return jsonify({"status": "API kjører 🚀"})
+
+
 @app.route('/api/oppdrag', methods=['GET'])
 def hent_oppdrag():
     """Hent alle oppdrag"""
@@ -110,5 +116,9 @@ def oppdater_status(oppdrag_id):
 
 
 if __name__ == '__main__':
-    init_db()  # Sørg for at tabellen finnes
+    try:
+        init_db()  # Sørg for at tabellen finnes
+    except Exception as e:
+        print("⚠️ Appen starter uten å opprette tabell:", e)
+
     app.run(host='0.0.0.0', port=5000)
