@@ -1,20 +1,18 @@
-from flask import Flask, request, jsonify, render_template
+from flask import Flask, render_template, request, jsonify
 import psycopg2
 import os
-from datetime import datetime
 
 app = Flask(__name__)
 
 # Hent database-URL fra Render miljøvariabel
 DATABASE_URL = os.environ.get("DATABASE_URL")
 
-# Funksjon for å koble til databasen
 def get_db_connection():
     conn = psycopg2.connect(DATABASE_URL, sslmode="require")
     return conn
 
-# Opprett tabellen hvis den ikke finnes
 def init_db():
+    """Oppretter tabellen hvis den ikke finnes"""
     conn = get_db_connection()
     cur = conn.cursor()
     cur.execute("""
@@ -24,9 +22,8 @@ def init_db():
             description TEXT,
             created_by TEXT,
             assigned_to TEXT,
-            status TEXT,
-            created_at TIMESTAMP
-        )
+            status TEXT DEFAULT 'Ny'
+        );
     """)
     conn.commit()
     cur.close()
@@ -40,23 +37,22 @@ def index():
 def get_tasks():
     conn = get_db_connection()
     cur = conn.cursor()
-    cur.execute("SELECT id, title, description, created_by, assigned_to, status, created_at FROM tasks;")
-    tasks = cur.fetchall()
+    cur.execute("SELECT id, title, description, created_by, assigned_to, status FROM tasks;")
+    rows = cur.fetchall()
     cur.close()
     conn.close()
 
-    task_list = []
-    for row in tasks:
-        task_list.append({
+    tasks = []
+    for row in rows:
+        tasks.append({
             "id": row[0],
             "title": row[1],
             "description": row[2],
             "created_by": row[3],
             "assigned_to": row[4],
-            "status": row[5],
-            "created_at": row[6].strftime("%Y-%m-%d %H:%M:%S") if row[6] else None
+            "status": row[5]
         })
-    return jsonify(task_list)
+    return jsonify(tasks)
 
 @app.route("/tasks", methods=["POST"])
 def add_task():
@@ -65,24 +61,34 @@ def add_task():
     description = data.get("description")
     created_by = data.get("created_by")
     assigned_to = data.get("assigned_to")
-    status = "Ny"
-    created_at = datetime.now()
 
     conn = get_db_connection()
     cur = conn.cursor()
     cur.execute(
-        "INSERT INTO tasks (title, description, created_by, assigned_to, status, created_at) VALUES (%s, %s, %s, %s, %s, %s)",
-        (title, description, created_by, assigned_to, status, created_at)
+        "INSERT INTO tasks (title, description, created_by, assigned_to) VALUES (%s, %s, %s, %s) RETURNING id;",
+        (title, description, created_by, assigned_to)
     )
+    task_id = cur.fetchone()[0]
     conn.commit()
     cur.close()
     conn.close()
 
-    return jsonify({"message": "Oppdrag lagt til!"})
+    return jsonify({"id": task_id, "title": title, "description": description, "created_by": created_by, "assigned_to": assigned_to, "status": "Ny"})
+
+@app.route("/tasks/<int:task_id>", methods=["PUT"])
+def update_task(task_id):
+    data = request.json
+    status = data.get("status")
+
+    conn = get_db_connection()
+    cur = conn.cursor()
+    cur.execute("UPDATE tasks SET status = %s WHERE id = %s;", (status, task_id))
+    conn.commit()
+    cur.close()
+    conn.close()
+
+    return jsonify({"id": task_id, "status": status})
 
 if __name__ == "__main__":
-    # Opprett tabellen automatisk hvis den ikke finnes
-    init_db()
-
-    port = int(os.environ.get("PORT", 8000))
-    app.run(host="0.0.0.0", port=port, debug=True)
+    init_db()  # Opprett tabell ved oppstart
+    app.run(host="0.0.0.0", port=5000, debug=True)
