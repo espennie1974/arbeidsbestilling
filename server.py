@@ -94,6 +94,17 @@ def update_task(task_id):
 
     return jsonify({"id": task_id, "status": status})
 
+@app.route("/debug")
+def debug():
+    """Enkel debug-side for å sjekke databaseinnhold"""
+    conn = get_db_connection()
+    cur = conn.cursor()
+    cur.execute("SELECT COUNT(*) FROM tasks;")
+    count = cur.fetchone()[0]
+    cur.close()
+    conn.close()
+    return f"<h1>Debug info</h1><p>Antall oppdrag i databasen: {count}</p>"
+
 if __name__ == "__main__":
     init_db()
     app.run(host="0.0.0.0", port=5000)
