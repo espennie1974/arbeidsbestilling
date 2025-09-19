@@ -1,110 +1,114 @@
 import os
 import psycopg2
-from flask import Flask, request, jsonify, render_template
+from flask import Flask, render_template, request, jsonify
 
 app = Flask(__name__)
 
-# Hent database-url fra Render sine miljøvariabler
-DATABASE_URL = os.getenv("DATABASE_URL")
+# Hent database-URL fra miljøvariabel
+DATABASE_URL = os.environ.get("DATABASE_URL")
+print("=== Bruker denne DATABASE_URL ===")
+print(DATABASE_URL)
+
 
 def get_db_connection():
-    conn = psycopg2.connect(DATABASE_URL, sslmode="require")
-    return conn
+    """Koble til databasen"""
+    try:
+        conn = psycopg2.connect(DATABASE_URL, sslmode="require")
+        print("✅ Database-tilkobling OK")
+        return conn
+    except Exception as e:
+        print("❌ Feil ved tilkobling til databasen:", e)
+        raise
+
 
 def init_db():
-    """Opprett tabellen tasks hvis den ikke finnes, og logg hvor mange oppdrag som finnes"""
-    conn = get_db_connection()
-    cur = conn.cursor()
-    cur.execute("""
-        CREATE TABLE IF NOT EXISTS tasks (
-            id SERIAL PRIMARY KEY,
-            title TEXT NOT NULL,
-            description TEXT,
-            status TEXT DEFAULT 'Ny',
-            created_by TEXT,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        );
-    """)
-    conn.commit()
+    """Opprett tabell hvis den ikke finnes"""
+    try:
+        conn = get_db_connection()
+        cur = conn.cursor()
+        print("⚙️ Oppretter tabell hvis den ikke finnes...")
 
-    # Tell antall rader
-    cur.execute("SELECT COUNT(*) FROM tasks;")
-    count = cur.fetchone()[0]
-    print(f"✅ Tabell 'tasks' er klar. Antall eksisterende oppdrag: {count}")
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS oppdrag (
+                id SERIAL PRIMARY KEY,
+                tittel TEXT NOT NULL,
+                beskrivelse TEXT,
+                status TEXT DEFAULT 'Ny'
+            );
+        """)
 
-    cur.close()
-    conn.close()
+        conn.commit()
+        cur.close()
+        conn.close()
+        print("✅ Tabell klar")
+    except Exception as e:
+        print("❌ Klarte ikke å opprette tabell:", e)
+        raise
 
-@app.route("/")
+
+@app.route('/')
 def index():
-    return render_template("index.html")
+    """Vis hovedsiden"""
+    return render_template('index.html')
 
-@app.route("/tasks", methods=["GET"])
-def get_tasks():
-    conn = get_db_connection()
-    cur = conn.cursor()
-    cur.execute("SELECT id, title, description, status, created_by, created_at FROM tasks ORDER BY created_at DESC;")
-    tasks = cur.fetchall()
-    cur.close()
-    conn.close()
 
-    task_list = []
-    for row in tasks:
-        task_list.append({
-            "id": row[0],
-            "title": row[1],
-            "description": row[2],
-            "status": row[3],
-            "created_by": row[4],
-            "created_at": row[5].strftime("%Y-%m-%d %H:%M:%S")
-        })
-    return jsonify(task_list)
+@app.route('/api/oppdrag', methods=['GET'])
+def hent_oppdrag():
+    """Hent alle oppdrag"""
+    try:
+        conn = get_db_connection()
+        cur = conn.cursor()
+        cur.execute("SELECT id, tittel, beskrivelse, status FROM oppdrag ORDER BY id DESC;")
+        oppdrag = cur.fetchall()
+        cur.close()
+        conn.close()
+        return jsonify(oppdrag)
+    except Exception as e:
+        print("❌ Feil ved henting av oppdrag:", e)
+        return jsonify({"error": "Kunne ikke hente oppdrag"}), 500
 
-@app.route("/tasks", methods=["POST"])
-def create_task():
-    data = request.get_json()
-    title = data.get("title")
-    description = data.get("description")
-    created_by = data.get("created_by")
 
-    conn = get_db_connection()
-    cur = conn.cursor()
-    cur.execute(
-        "INSERT INTO tasks (title, description, created_by) VALUES (%s, %s, %s) RETURNING id;",
-        (title, description, created_by)
-    )
-    task_id = cur.fetchone()[0]
-    conn.commit()
-    cur.close()
-    conn.close()
+@app.route('/api/oppdrag', methods=['POST'])
+def legg_til_oppdrag():
+    """Legg til nytt oppdrag"""
+    data = request.json
+    try:
+        conn = get_db_connection()
+        cur = conn.cursor()
+        cur.execute(
+            "INSERT INTO oppdrag (tittel, beskrivelse, status) VALUES (%s, %s, %s) RETURNING id;",
+            (data['tittel'], data['beskrivelse'], data.get('status', 'Ny'))
+        )
+        oppdrag_id = cur.fetchone()[0]
+        conn.commit()
+        cur.close()
+        conn.close()
+        return jsonify({"id": oppdrag_id}), 201
+    except Exception as e:
+        print("❌ Feil ved innsending av oppdrag:", e)
+        return jsonify({"error": "Kunne ikke legge til oppdrag"}), 500
 
-    return jsonify({"id": task_id, "title": title, "description": description, "created_by": created_by, "status": "Ny"})
 
-@app.route("/tasks/<int:task_id>", methods=["PUT"])
-def update_task(task_id):
-    data = request.get_json()
-    status = data.get("status")
+@app.route('/api/oppdrag/<int:oppdrag_id>', methods=['PUT'])
+def oppdater_status(oppdrag_id):
+    """Oppdater status på et oppdrag"""
+    data = request.json
+    try:
+        conn = get_db_connection()
+        cur = conn.cursor()
+        cur.execute(
+            "UPDATE oppdrag SET status = %s WHERE id = %s;",
+            (data['status'], oppdrag_id)
+        )
+        conn.commit()
+        cur.close()
+        conn.close()
+        return jsonify({"status": "oppdatert"})
+    except Exception as e:
+        print("❌ Feil ved oppdatering av oppdrag:", e)
+        return jsonify({"error": "Kunne ikke oppdatere oppdrag"}), 500
 
-    conn = get_db_connection()
-    cur = conn.cursor()
-    cur.execute("UPDATE tasks SET status = %s WHERE id = %s;", (status, task_id))
-    conn.commit()
-    cur.close()
-    conn.close()
 
-    return jsonify({"id": task_id, "status": status})
-
-@app.route("/debug")
-def debug():
-    """Enkel debug-side for å sjekke databaseinnhold"""
-    conn = get_db_connection()
-    cur = conn.cursor()
-    cur.execute("SELECT COUNT(*) FROM tasks;")
-    count = cur.fetchone()[0]
-    cur.close()
-    conn.close()
-    return f"<h1>Debug info</h1><p>Antall oppdrag i databasen: {count}</p>"
-
-if __name__ == "__main__":
-    init_db()
-    app.run(host="0.0.0.0", port=5000)
+if __name__ == '__main__':
+    init_db()  # Sørg for at tabellen finnes
+    app.run(host='0.0.0.0', port=5000)
