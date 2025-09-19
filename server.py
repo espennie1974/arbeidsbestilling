@@ -4,15 +4,20 @@ import os
 
 app = Flask(__name__)
 
-# Hent database-URL fra Render miljøvariabel
+# Hent DATABASE_URL fra miljøvariabel
 DATABASE_URL = os.environ.get("DATABASE_URL")
 
+# Debug: skriv ut hvilken database som brukes
+print("=== Bruker denne DATABASE_URL ===")
+print(DATABASE_URL)
+
+# Funksjon for å koble til databasen
 def get_db_connection():
     conn = psycopg2.connect(DATABASE_URL, sslmode="require")
     return conn
 
+# Opprett tabell hvis den ikke finnes
 def init_db():
-    """Oppretter tabellen hvis den ikke finnes"""
     conn = get_db_connection()
     cur = conn.cursor()
     cur.execute("""
@@ -57,38 +62,32 @@ def get_tasks():
 @app.route("/tasks", methods=["POST"])
 def add_task():
     data = request.json
-    title = data.get("title")
-    description = data.get("description")
-    created_by = data.get("created_by")
-    assigned_to = data.get("assigned_to")
-
     conn = get_db_connection()
     cur = conn.cursor()
     cur.execute(
-        "INSERT INTO tasks (title, description, created_by, assigned_to) VALUES (%s, %s, %s, %s) RETURNING id;",
-        (title, description, created_by, assigned_to)
+        "INSERT INTO tasks (title, description, created_by, assigned_to, status) VALUES (%s, %s, %s, %s, %s) RETURNING id;",
+        (data["title"], data["description"], data["created_by"], data["assigned_to"], "Ny")
     )
     task_id = cur.fetchone()[0]
     conn.commit()
     cur.close()
     conn.close()
-
-    return jsonify({"id": task_id, "title": title, "description": description, "created_by": created_by, "assigned_to": assigned_to, "status": "Ny"})
+    return jsonify({"id": task_id}), 201
 
 @app.route("/tasks/<int:task_id>", methods=["PUT"])
 def update_task(task_id):
     data = request.json
-    status = data.get("status")
-
     conn = get_db_connection()
     cur = conn.cursor()
-    cur.execute("UPDATE tasks SET status = %s WHERE id = %s;", (status, task_id))
+    cur.execute(
+        "UPDATE tasks SET status = %s WHERE id = %s;",
+        (data["status"], task_id)
+    )
     conn.commit()
     cur.close()
     conn.close()
-
-    return jsonify({"id": task_id, "status": status})
+    return jsonify({"message": "Task updated"}), 200
 
 if __name__ == "__main__":
     init_db()  # Opprett tabell ved oppstart
-    app.run(host="0.0.0.0", port=5000, debug=True)
+    app.run(host="0.0.0.0", port=10000, debug=True)
