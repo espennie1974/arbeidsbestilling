@@ -1,23 +1,48 @@
 from flask import Flask, render_template, request, jsonify
 import psycopg2
+import psycopg2.errors
 import os
 
 app = Flask(__name__)
 
-# Hent DATABASE_URL fra miljøvariabel
+# Hent database-info fra miljøvariabel
 DATABASE_URL = os.environ.get("DATABASE_URL")
-
-# Debug: skriv ut hvilken database som brukes
 print("=== Bruker denne DATABASE_URL ===")
 print(DATABASE_URL)
 
-# Funksjon for å koble til databasen
+# Ekstra: lag en connection string uten databasenavn (for å kunne opprette databasen)
+def get_base_connection():
+    """Koble til server uten å spesifisere database, for å opprette database hvis den mangler"""
+    parts = DATABASE_URL.rsplit("/", 1)
+    base_url = parts[0] + "/postgres"  # prøv å koble til postgres som systemdatabase
+    return psycopg2.connect(base_url, sslmode="require")
+
+def ensure_database():
+    """Opprett selve databasen hvis den mangler"""
+    try:
+        conn = psycopg2.connect(DATABASE_URL, sslmode="require")
+        conn.close()
+        print("✅ Databasen finnes allerede")
+    except psycopg2.OperationalError as e:
+        if "does not exist" in str(e):
+            print("⚠️ Databasen mangler, oppretter arbeidsbestilling_db...")
+            conn = get_base_connection()
+            conn.autocommit = True
+            cur = conn.cursor()
+            cur.execute("CREATE DATABASE arbeidsbestilling_db;")
+            cur.close()
+            conn.close()
+            print("✅ Databasen ble opprettet")
+        else:
+            raise
+
 def get_db_connection():
     conn = psycopg2.connect(DATABASE_URL, sslmode="require")
     return conn
 
-# Opprett tabell hvis den ikke finnes
 def init_db():
+    """Opprett tabellen hvis den ikke finnes"""
+    ensure_database()
     conn = get_db_connection()
     cur = conn.cursor()
     cur.execute("""
@@ -33,6 +58,7 @@ def init_db():
     conn.commit()
     cur.close()
     conn.close()
+    print("✅ Tabell tasks er klar")
 
 @app.route("/")
 def index():
@@ -89,5 +115,5 @@ def update_task(task_id):
     return jsonify({"message": "Task updated"}), 200
 
 if __name__ == "__main__":
-    init_db()  # Opprett tabell ved oppstart
+    init_db()  # Opprett database og tabell ved oppstart
     app.run(host="0.0.0.0", port=10000, debug=True)
