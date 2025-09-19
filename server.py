@@ -12,7 +12,7 @@ def get_db_connection():
     return conn
 
 def init_db():
-    """Opprett tabellen tasks hvis den ikke finnes"""
+    """Opprett tabellen tasks hvis den ikke finnes, og logg hvor mange oppdrag som finnes"""
     conn = get_db_connection()
     cur = conn.cursor()
     cur.execute("""
@@ -26,9 +26,14 @@ def init_db():
         );
     """)
     conn.commit()
+
+    # Tell antall rader
+    cur.execute("SELECT COUNT(*) FROM tasks;")
+    count = cur.fetchone()[0]
+    print(f"✅ Tabell 'tasks' er klar. Antall eksisterende oppdrag: {count}")
+
     cur.close()
     conn.close()
-    print("✅ Tabell 'tasks' er klar.")
 
 @app.route("/")
 def index():
