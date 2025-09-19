@@ -1,25 +1,26 @@
 <!DOCTYPE html>
 <html lang="no">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Arbeidsbestilling</title>
-    <link rel="stylesheet" href="/static/style.css">
+  <meta charset="UTF-8">
+  <title>Arbeidsbestilling</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 </head>
 <body>
+  <div class="container">
     <h1>Arbeidsbestilling</h1>
 
     <form id="taskForm">
-        <input type="text" id="title" placeholder="Tittel" required>
-        <input type="text" id="description" placeholder="Beskrivelse" required>
-        <input type="text" id="created_by" placeholder="Opprettet av">
-        <input type="text" id="assigned_to" placeholder="Tildelt til">
-        <button type="submit">Legg til oppdrag</button>
+      <input type="text" id="title" placeholder="Tittel" required>
+      <input type="text" id="description" placeholder="Beskrivelse" required>
+      <input type="text" id="created_by" placeholder="Opprettet av" required>
+      <input type="text" id="assigned_to" placeholder="Tildelt til">
+      <button type="submit">Legg til oppdrag</button>
     </form>
 
     <h2>Oppdragsliste</h2>
-    <ul id="taskList"></ul>
+    <div id="taskList"></div>
+  </div>
 
-    <script src="/static/script.js"></script>
+  <script src="{{ url_for('static', filename='script.js') }}"></script>
 </body>
 </html>
