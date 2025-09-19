@@ -1,48 +1,18 @@
-from flask import Flask, render_template, request, jsonify
-import psycopg2
-import psycopg2.errors
 import os
+import psycopg2
+from flask import Flask, request, jsonify, render_template
 
 app = Flask(__name__)
 
-# Hent database-info fra miljøvariabel
-DATABASE_URL = os.environ.get("DATABASE_URL")
-print("=== Bruker denne DATABASE_URL ===")
-print(DATABASE_URL)
-
-# Ekstra: lag en connection string uten databasenavn (for å kunne opprette databasen)
-def get_base_connection():
-    """Koble til server uten å spesifisere database, for å opprette database hvis den mangler"""
-    parts = DATABASE_URL.rsplit("/", 1)
-    base_url = parts[0] + "/postgres"  # prøv å koble til postgres som systemdatabase
-    return psycopg2.connect(base_url, sslmode="require")
-
-def ensure_database():
-    """Opprett selve databasen hvis den mangler"""
-    try:
-        conn = psycopg2.connect(DATABASE_URL, sslmode="require")
-        conn.close()
-        print("✅ Databasen finnes allerede")
-    except psycopg2.OperationalError as e:
-        if "does not exist" in str(e):
-            print("⚠️ Databasen mangler, oppretter arbeidsbestilling_db...")
-            conn = get_base_connection()
-            conn.autocommit = True
-            cur = conn.cursor()
-            cur.execute("CREATE DATABASE arbeidsbestilling_db;")
-            cur.close()
-            conn.close()
-            print("✅ Databasen ble opprettet")
-        else:
-            raise
+# Hent database-url fra Render sine miljøvariabler
+DATABASE_URL = os.getenv("DATABASE_URL")
 
 def get_db_connection():
     conn = psycopg2.connect(DATABASE_URL, sslmode="require")
     return conn
 
 def init_db():
-    """Opprett tabellen hvis den ikke finnes"""
-    ensure_database()
+    """Opprett tabellen tasks hvis den ikke finnes"""
     conn = get_db_connection()
     cur = conn.cursor()
     cur.execute("""
@@ -50,15 +20,15 @@ def init_db():
             id SERIAL PRIMARY KEY,
             title TEXT NOT NULL,
             description TEXT,
+            status TEXT DEFAULT 'Ny',
             created_by TEXT,
-            assigned_to TEXT,
-            status TEXT DEFAULT 'Ny'
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         );
     """)
     conn.commit()
     cur.close()
     conn.close()
-    print("✅ Tabell tasks er klar")
+    print("✅ Tabell 'tasks' er klar.")
 
 @app.route("/")
 def index():
@@ -68,52 +38,57 @@ def index():
 def get_tasks():
     conn = get_db_connection()
     cur = conn.cursor()
-    cur.execute("SELECT id, title, description, created_by, assigned_to, status FROM tasks;")
-    rows = cur.fetchall()
+    cur.execute("SELECT id, title, description, status, created_by, created_at FROM tasks ORDER BY created_at DESC;")
+    tasks = cur.fetchall()
     cur.close()
     conn.close()
 
-    tasks = []
-    for row in rows:
-        tasks.append({
+    task_list = []
+    for row in tasks:
+        task_list.append({
             "id": row[0],
             "title": row[1],
             "description": row[2],
-            "created_by": row[3],
-            "assigned_to": row[4],
-            "status": row[5]
+            "status": row[3],
+            "created_by": row[4],
+            "created_at": row[5].strftime("%Y-%m-%d %H:%M:%S")
         })
-    return jsonify(tasks)
+    return jsonify(task_list)
 
 @app.route("/tasks", methods=["POST"])
-def add_task():
-    data = request.json
+def create_task():
+    data = request.get_json()
+    title = data.get("title")
+    description = data.get("description")
+    created_by = data.get("created_by")
+
     conn = get_db_connection()
     cur = conn.cursor()
     cur.execute(
-        "INSERT INTO tasks (title, description, created_by, assigned_to, status) VALUES (%s, %s, %s, %s, %s) RETURNING id;",
-        (data["title"], data["description"], data["created_by"], data["assigned_to"], "Ny")
+        "INSERT INTO tasks (title, description, created_by) VALUES (%s, %s, %s) RETURNING id;",
+        (title, description, created_by)
     )
     task_id = cur.fetchone()[0]
     conn.commit()
     cur.close()
     conn.close()
-    return jsonify({"id": task_id}), 201
+
+    return jsonify({"id": task_id, "title": title, "description": description, "created_by": created_by, "status": "Ny"})
 
 @app.route("/tasks/<int:task_id>", methods=["PUT"])
 def update_task(task_id):
-    data = request.json
+    data = request.get_json()
+    status = data.get("status")
+
     conn = get_db_connection()
     cur = conn.cursor()
-    cur.execute(
-        "UPDATE tasks SET status = %s WHERE id = %s;",
-        (data["status"], task_id)
-    )
+    cur.execute("UPDATE tasks SET status = %s WHERE id = %s;", (status, task_id))
     conn.commit()
     cur.close()
     conn.close()
-    return jsonify({"message": "Task updated"}), 200
+
+    return jsonify({"id": task_id, "status": status})
 
 if __name__ == "__main__":
-    init_db()  # Opprett database og tabell ved oppstart
-    app.run(host="0.0.0.0", port=10000, debug=True)
+    init_db()
+    app.run(host="0.0.0.0", port=5000)
