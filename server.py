@@ -58,6 +58,21 @@ def test():
     return jsonify({"status": "API kjører 🚀"})
 
 
+@app.route('/dbtest')
+def dbtest():
+    """Test database-tilkobling"""
+    try:
+        conn = get_db_connection()
+        cur = conn.cursor()
+        cur.execute("SELECT 1;")
+        cur.fetchone()
+        cur.close()
+        conn.close()
+        return jsonify({"database": "OK ✅"})
+    except Exception as e:
+        return jsonify({"database": "Feil ❌", "detaljer": str(e)}), 500
+
+
 @app.route('/api/oppdrag', methods=['GET'])
 def hent_oppdrag():
     """Hent alle oppdrag"""
